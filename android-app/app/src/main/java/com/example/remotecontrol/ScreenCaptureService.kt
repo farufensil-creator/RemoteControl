@@ -73,6 +73,12 @@ class ScreenCaptureService : Service() {
     }
 
     private fun startCapture() {
+        mediaProjection.registerCallback(object : MediaProjection.Callback() {
+            override fun onStop() {
+                virtualDisplay?.release()
+                imageReader?.close()
+            }
+        }, null)
         imageReader = ImageReader.newInstance(
             screenWidth, screenHeight, PixelFormat.RGBA_8888, 2
         )
