@@ -83,15 +83,19 @@ function toPhoneCoords(evt) {
 
 let dragStart = null;
 
-document.getElementById('screen').addEventListener('mousedown', (evt) => {
-  dragStart = toPhoneCoords(evt);
-});
+function toPhoneCoordsTouch(touch) {
+  const img = document.getElementById('screen');
+  const rect = img.getBoundingClientRect();
+  const scaleX = img.naturalWidth / rect.width;
+  const scaleY = img.naturalHeight / rect.height;
+  const x = (touch.clientX - rect.left) * scaleX;
+  const y = (touch.clientY - rect.top) * scaleY;
+  return { x, y };
+}
 
-document.getElementById('screen').addEventListener('mouseup', (evt) => {
+function sendTapOrSwipe(end) {
   if (!ws || ws.readyState !== WebSocket.OPEN || !dragStart) return;
-  const end = toPhoneCoords(evt);
   const dist = Math.hypot(end.x - dragStart.x, end.y - dragStart.y);
-
   if (dist < 10) {
     ws.send(JSON.stringify({ type: 'tap', x: dragStart.x, y: dragStart.y }));
   } else {
@@ -103,7 +107,27 @@ document.getElementById('screen').addEventListener('mouseup', (evt) => {
     }));
   }
   dragStart = null;
+}
+
+const screenEl = document.getElementById('screen');
+
+screenEl.addEventListener('mousedown', (evt) => {
+  dragStart = toPhoneCoords(evt);
 });
+screenEl.addEventListener('mouseup', (evt) => {
+  sendTapOrSwipe(toPhoneCoords(evt));
+});
+
+screenEl.addEventListener('touchstart', (evt) => {
+  evt.preventDefault();
+  dragStart = toPhoneCoordsTouch(evt.touches[0]);
+}, { passive: false });
+
+screenEl.addEventListener('touchend', (evt) => {
+  evt.preventDefault();
+  const touch = evt.changedTouches[0];
+  sendTapOrSwipe(toPhoneCoordsTouch(touch));
+}, { passive: false });
 
 function sendGlobal(action) {
   if (ws && ws.readyState === WebSocket.OPEN) {
