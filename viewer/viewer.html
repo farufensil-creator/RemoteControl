@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>RemoteControl Viewer</title>
+<style>
+  body { font-family: sans-serif; background:#111; color:#eee; text-align:center; }
+  #screen { border: 2px solid #444; max-width: 95vw; cursor: crosshair; }
+  #bar { margin: 12px; }
+  input { padding:6px; }
+  #relayUrl { width: 260px; }
+  #code { width: 100px; }
+  button { padding:6px 14px; margin-left:6px; }
+  #status { margin-top:8px; font-size:14px; color:#8f8; }
+</style>
+</head>
+<body>
+  <h2>RemoteControl Viewer</h2>
+  <div id="bar">
+    <input id="relayUrl" placeholder="wss://your-app.onrender.com" />
+    <input id="code" placeholder="Pairing code" />
+    <button onclick="connect()">Connect</button>
+    <button onclick="sendGlobal('back')">Back</button>
+    <button onclick="sendGlobal('home')">Home</button>
+    <button onclick="sendGlobal('recents')">Recents</button>
+  </div>
+  <div id="status">Not connected</div>
+  <br/>
+  <img id="screen" alt="phone screen will appear here"/>
+
+<script>
+let ws = null;
+
+function connect() {
+  const relayUrl = document.getElementById('relayUrl').value.trim();
+  const code = document.getElementById('code').value.trim();
+  if (!relayUrl || !code) { alert('Enter both the relay URL and the pairing code'); return; }
+
+  ws = new WebSocket(relayUrl);
+  ws.binaryType = 'arraybuffer';
+
+  ws.onopen = () => {
+    ws.send(JSON.stringify({ type: 'join', role: 'viewer', code: code }));
+    setStatus('Connecting...', '#ff8');
+  };
+  ws.onclose = () => setStatus('Disconnected', '#f88');
+  ws.onerror = () => setStatus('Connection error', '#f88');
+
+  ws.onmessage = (event) => {
+    if (typeof event.data === 'string') {
+      // Text messages are relay control messages (e.g. {"type":"joined"})
+      try {
+        const msg = JSON.parse(event.data);
+        if (msg.type === 'joined') setStatus('Connected ✓ (waiting for phone frames)', '#8f8');
+      } catch (e) { /* ignore */ }
+      return;
+    }
+    // Binary messages are JPEG screen frames
+    const blob = new Blob([event.data], { type: 'image/jpeg' });
+    const url = URL.createObjectURL(blob);
+    const img = document.getElementById('screen');
+    img.onload = () => URL.revokeObjectURL(url);
+    img.src = url;
+    setStatus('Connected ✓ (streaming)', '#8f8');
+  };
+}
+
+function setStatus(text, color) {
+  const el = document.getElementById('status');
+  el.textContent = text;
+  el.style.color = color;
+}
+
+function toPhoneCoords(evt) {
+  const img = document.getElementById('screen');
+  const rect = img.getBoundingClientRect();
+  const scaleX = img.naturalWidth / rect.width;
+  const scaleY = img.naturalHeight / rect.height;
+  const x = (evt.clientX - rect.left) * scaleX;
+  const y = (evt.clientY - rect.top) * scaleY;
+  return { x, y };
+}
+
+let dragStart = null;
+
+document.getElementById('screen').addEventListener('mousedown', (evt) => {
+  dragStart = toPhoneCoords(evt);
+});
+
+document.getElementById('screen').addEventListener('mouseup', (evt) => {
+  if (!ws || ws.readyState !== WebSocket.OPEN || !dragStart) return;
+  const end = toPhoneCoords(evt);
+  const dist = Math.hypot(end.x - dragStart.x, end.y - dragStart.y);
+
+  if (dist < 10) {
+    ws.send(JSON.stringify({ type: 'tap', x: dragStart.x, y: dragStart.y }));
+  } else {
+    ws.send(JSON.stringify({
+      type: 'swipe',
+      x1: dragStart.x, y1: dragStart.y,
+      x2: end.x, y2: end.y,
+      durationMs: 200
+    }));
+  }
+  dragStart = null;
+});
+
+function sendGlobal(action) {
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify({ type: action }));
+  }
+}
+</script>
+</body>
+</html>
