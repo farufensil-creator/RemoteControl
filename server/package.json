@@ -1,0 +1,12 @@
+{
+  "name": "remotecontrol-relay",
+  "version": "1.0.0",
+  "description": "WebSocket relay so the phone and viewer can find each other over the internet, without either needing a public IP.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "ws": "^8.16.0"
+  }
+}
